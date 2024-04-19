@@ -1,8 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
+using Azure.Core;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NuGet.DependencyResolver;
@@ -21,11 +24,51 @@ namespace QLDoAn.Controllers
         {
             _context = context;
         }
+        [HttpPost("ChangePassword")]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto model)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(ModelState);
+                }
+
+                // Lấy thông tin người dùng đã xác thực từ HttpContext
+                //var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                //if (userId == null)
+                //{
+                //    return Unauthorized(); // Người dùng chưa đăng nhập
+                //}
+
+                // Tìm tài khoản dựa trên ID của người dùng đã xác thực
+                var account = await _context.account.Where(x=>x.ID == model.UserID && x.Password == model.CurrentPassword).FirstOrDefaultAsync();
+
+                if (account == null)
+                {
+                    return NotFound("Account not found");
+                }
+                else
+                {
+                    account.Password = model.NewPassword;
+                    account.ModifiedDate = DateTime.Now;
+                    account.Status = 2;
+                }
+                
+                // Lưu các thay đổi vào cơ sở dữ liệu
+                //_context.account.Update(account);
+                await _context.SaveChangesAsync();
+
+                return Ok("Password changed successfully");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Internal server error: {ex.Message}");
+            }
+        }
 
         // GET: api/accounts
         [HttpPost("Register")]
-
-        
         public async Task<IActionResult> Register(string Name, string Password, int RoleID, string StudentID, string StudentName, DateTime Dob, int Sex, string Address, string PhoneNumber, string EmailAddress, string Country, string ImageUrl, string Description = null)
         {
             if (!ModelState.IsValid)
@@ -105,8 +148,7 @@ namespace QLDoAn.Controllers
             }
         }
         [HttpPost("Login")]
-       
-        public async Task<IActionResult> Login([FromBody]clsLoginParam request)
+        public async Task<IActionResult> Login([FromBody] clsLoginParam request)
         {
             try
             {
@@ -115,44 +157,54 @@ namespace QLDoAn.Controllers
                     return BadRequest(ModelState);
                 }
 
-                var account = await _context.account
-                    .SingleOrDefaultAsync(a => a.Name == request.Name && a.Password == request.Password);
+                // Find the account based on username and password
+                var account = await _context.account.SingleOrDefaultAsync(account => account.Name == request.Name && account.Password == request.Password);
 
                 if (account == null)
                 {
                     return NotFound("Invalid username or password");
                 }
 
-                if (account.RoleID == 0) // Nếu là tài khoản giáo viên
+                // Determine the role of the account
+                if (account.RoleID == 0) // Teacher
                 {
+                    // Load teacher information
                     var teacher = await _context.teacher.FirstOrDefaultAsync(t => t.AccountID == account.ID);
                     if (teacher == null)
                     {
                         return NotFound("Teacher profile not found");
                     }
-                    return Ok("Login successful as a teacher");
+
+                    // Return teacher information along with account details
+                    return Ok(new { Account = account, TeacherInfo = teacher });
                 }
-                else if (account.RoleID == 1) // Nếu là tài khoản sinh viên
+                else if (account.RoleID == 1) // Student
                 {
+                    // Load student information
                     var student = await _context.student.FirstOrDefaultAsync(s => s.AccountID == account.ID);
                     if (student == null)
                     {
                         return NotFound("Student profile not found");
                     }
-                    return Ok("Login successful as a student");
+
+                    // Return student information along with account details
+                    return Ok(new { Account = account, StudentInfo = student });
                 }
-                else // Nếu RoleID không hợp lệ
+                else
                 {
+                    // If the RoleID is neither 0 (Teacher) nor 1 (Student)
                     return BadRequest("Invalid RoleID");
                 }
             }
             catch (Exception ex)
             {
-                return BadRequest(ex.Message);
+                // Handle unexpected exceptions
+                return StatusCode(500, $"Internal server error: {ex.Message}");
             }
-
-         
         }
+
+
+
 
         [HttpGet]
         public async Task<IActionResult> GetALlAccount()

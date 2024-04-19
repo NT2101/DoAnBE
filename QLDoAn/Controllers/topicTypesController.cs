@@ -22,14 +22,14 @@ namespace QLDoAn.Controllers
         }
 
         // GET: api/topicTypes
-        [HttpGet]
+        [HttpGet("All")]
         public async Task<ActionResult<IEnumerable<topicType>>> GettopicType()
         {
             return await _context.topicType.ToListAsync();
         }
 
         // GET: api/topicTypes/5
-        [HttpGet("{id}")]
+        [HttpGet]
         public async Task<ActionResult<topicType>> GettopicType(int id)
         {
             var topicType = await _context.topicType.FindAsync(id);
@@ -44,48 +44,60 @@ namespace QLDoAn.Controllers
 
         // PUT: api/topicTypes/5
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PuttopicType(int id, topicType topicType)
+        [HttpPut("Update")]
+        public IActionResult UpdateTopicType(int id, TopicTypeDTO Updatetopictype)
         {
-            if (id != topicType.ID)
+            using (var transaction = _context.Database.BeginTransaction())
             {
-                return BadRequest();
-            }
-
-            _context.Entry(topicType).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!topicTypeExists(id))
+                try
                 {
-                    return NotFound();
+                    // Tìm teacher cần sửa theo TeacherID
+                    var TopicTypeToUpdate = _context.topicType.FirstOrDefault(t => t.ID == id);
+
+                    if (TopicTypeToUpdate == null)
+                    {
+                        return NotFound($"Teacher with ID '{id}' not found.");
+                    }
+
+                    // Cập nhật thông tin của teacher từ DTO
+                    TopicTypeToUpdate.Name = Updatetopictype.name;
+                    TopicTypeToUpdate.Description = Updatetopictype.description;
+   
+
+                    // Lưu các thay đổi vào DbContext
+                    _context.SaveChanges();
+
+                    transaction.Commit(); // Lưu thay đổi vào database
+
+                    return Ok($"TopicType with ID '{id}' updated successfully.");
                 }
-                else
+                catch (Exception ex)
                 {
-                    throw;
+                    transaction.Rollback(); // Nếu có lỗi, rollback giao dịch
+                    return StatusCode(500, $"Internal server error: {ex}");
                 }
             }
-
-            return NoContent();
         }
 
         // POST: api/topicTypes
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPost]
-        public async Task<ActionResult<topicType>> PosttopicType(topicType topicType)
+        
+        [HttpPost("Create")]
+        public async Task<ActionResult<topicType>> CreateTopicType(topicType topicType)
         {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
             _context.topicType.Add(topicType);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction("GettopicType", new { id = topicType.ID }, topicType);
+            return CreatedAtAction("GetTopicType", new { id = topicType.ID }, topicType);
         }
 
         // DELETE: api/topicTypes/5
-        [HttpDelete("{id}")]
+        [HttpDelete("Delete")]
         public async Task<IActionResult> DeletetopicType(int id)
         {
             var topicType = await _context.topicType.FindAsync(id);
